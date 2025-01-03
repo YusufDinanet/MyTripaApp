@@ -2,7 +2,7 @@
 //  MyTripsaAppApp.swift
 //  MyTripsaApp
 //
-//  Created by Yusuf Dinanet on 15.12.2024.
+//  Created by İrem Onart on 15.12.2024.
 //
 import SwiftUI
 import GoogleSignIn
@@ -10,6 +10,7 @@ import FirebaseCore
 import Firebase
 import FirebaseAuth
 import CoreData
+import FirebaseFirestoreInternal
 
 @main
 struct MyTripsAppApp: App {
@@ -17,9 +18,7 @@ struct MyTripsAppApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     var body: some Scene {
         WindowGroup {
-            LoginView() // Launch the Home Page as the main screen
-            //            ContentView()
-            //                            .environment(\.managedObjectContext, persistenceController.viewContext)
+            LoginView()
         }
     }
 }
@@ -37,8 +36,13 @@ struct HomePageView: View {
     @StateObject private var locationManager = LocationManager()
     let persistenceController = PersistenceController.shared
     @Environment(\.managedObjectContext) private var viewContext
-    @State private var isLoading = false
     @Environment(\.presentationMode) var presentationMode
+    @State private var isLoading = false
+    @State private var isThemePickerPresented: Bool = false
+    @State private var selectedTheme: Theme = ThemeManager.shared.currentTheme
+    
+    @FetchRequest(sortDescriptors: []) var tripler: FetchedResults<TripEntity>
+    
     
     var body: some View {
         NavigationView {
@@ -54,15 +58,13 @@ struct HomePageView: View {
                         .padding(.top)
                     
                     // Trips List
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            ForEach(trips) { trip in
-                                NavigationLink(destination: TripDetailsView(trip: trip)) {
-                                    TripCardView(trip: trip)
-                                }
+                    List {
+                        ForEach(tripler, id: \.self) { trip in
+                            NavigationLink(destination: TripDetailsView(trip: trip).environment(\.managedObjectContext, persistenceController.viewContext)) {
+                                TripCardView(trip: trip)
                             }
                         }
-                        .padding(.horizontal)
+                        .onDelete(perform: deleteTrip)
                     }
                     
                     // Add New Trip Button
@@ -81,10 +83,21 @@ struct HomePageView: View {
                         .padding()
                     }
                 }
-            }.onAppear{
-                fetchTrips()
             }
-            .navigationBarHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        isThemePickerPresented = true
+                    }) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title2)
+                    }
+                    .popover(isPresented: $isThemePickerPresented) {
+                        ThemePickerView(selectedTheme: $selectedTheme, isPresented: $isThemePickerPresented)
+                    }
+                }
+            }
+            
         }.onAppear {
             let api = GeoapifyAPI()
             let urlString = api.createAttractionURL(
@@ -112,30 +125,21 @@ struct HomePageView: View {
         }
     }
     
-    private func fetchTrips() {
-        isLoading = true
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        
-        // Verilerin sıralanması
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: true)]
-        
-        do {
-            let tripEntities = try viewContext.fetch(request)
-            
-            // Core Data verilerini Trip struct'ına dönüştürme
-            trips = tripEntities.map { tripEntity in
-                Trip(
-                    id: tripEntity.id ?? UUID(), // Core Data'daki id'yi kullan
-                    name: tripEntity.name ?? "Bilinmiyor", // Name'yi al
-                    startDate: formatDate(tripEntity.startDate ?? Date()), // Tarih formatlama
-                    endDate: formatDate(tripEntity.endDate ?? Date()), // Tarih formatlama
-                    image: "defaultImage" // Görsel bilgisi
-                )
+    private func deleteTrip(offsets: IndexSet) {
+        withAnimation {
+            offsets.map { tripler[$0] }.forEach { trip in
+                viewContext.delete(trip)
             }
-        } catch {
-            print("Veriler çekilemedi: \(error.localizedDescription)")
+            saveContext()
         }
-        isLoading = false
+    }
+    
+    private func saveContext() {
+        do {
+            try viewContext.save()
+        } catch {
+            print("Veriler kaydedilemedi: \(error.localizedDescription)")
+        }
     }
     
     private func formatDate(_ date: Date) -> String {
@@ -148,22 +152,33 @@ struct HomePageView: View {
 
 // Trip Card View
 struct TripCardView: View {
-    let trip: Trip
+    let trip: TripEntity
     
     var body: some View {
         HStack {
-            Image(trip.image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 80, height: 80)
-                .clipped()
-                .cornerRadius(10)
+            if let imageName = trip.image,
+               let image = fetchImageFromDocumentsDirectory(imageName: imageName) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 80, height: 80)
+                    .clipped()
+                    .cornerRadius(10)
+            } else {
+                Image(systemName: "photo")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 80, height: 80)
+                    .foregroundColor(.gray)
+                    .clipped()
+                    .cornerRadius(10)
+            }
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(trip.name)
+                Text(trip.wrappedName)
                     .font(.headline)
                     .fontWeight(.semibold)
-                Text("\(trip.startDate) - \(trip.endDate)")
+                Text("\(formatDate(trip.wrappedStartDate)) - \(formatDate(trip.wrappedEndDate))")
                     .font(.subheadline)
                     .foregroundColor(.gray)
             }
@@ -174,35 +189,39 @@ struct TripCardView: View {
         .cornerRadius(10)
         .shadow(color: Color.gray.opacity(0.2), radius: 4, x: 0, y: 2)
     }
+    
+    private func fetchImageFromDocumentsDirectory(imageName: String) -> UIImage? {
+        let fileManager = FileManager.default
+        let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let fileURL = documentsDirectory.appendingPathComponent(imageName)
+        
+        if fileManager.fileExists(atPath: fileURL.path) {
+            return UIImage(contentsOfFile: fileURL.path)
+        } else {
+            print("Hata: Görsel bulunamadı - \(imageName)")
+            return nil
+        }
+    }
+    
+    func dataToBase64String(data: Data) -> String {
+        return data.base64EncodedString()
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        return formatter.string(from: date)
+    }
 }
 
 // Trip Model
-struct Trip: Identifiable, Hashable {
+struct Trip: Identifiable {
     let id: UUID
     let name: String
     let startDate: String
     let endDate: String
     let image: String
-
-    // Hashable için gerekli fonksiyon
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-        hasher.combine(name)
-        hasher.combine(startDate)
-        hasher.combine(endDate)
-        hasher.combine(image)
-    }
-
-    // Equatable için gerekli fonksiyon (bu genellikle otomatik olarak sağlanır, ancak istenirse manuel de yapılabilir)
-    static func ==(lhs: Trip, rhs: Trip) -> Bool {
-        return lhs.id == rhs.id &&
-            lhs.name == rhs.name &&
-            lhs.startDate == rhs.startDate &&
-            lhs.endDate == rhs.endDate &&
-            lhs.image == rhs.image
-    }
 }
-
 
 
 // Preview
