@@ -2,7 +2,7 @@
 //  Persistence.swift
 //  MyTripsaApp
 //
-//  Created by Yusuf Dinanet on 15.12.2024.
+//  Created by Samet Berkay Üner on 15.12.2024.
 //
 
 import CoreData
@@ -29,9 +29,6 @@ struct PersistenceController {
         return result
     }()
 
-    var viewContext: NSManagedObjectContext {
-        container.viewContext
-    }
     let container: NSPersistentContainer
 
     init(inMemory: Bool = false) {

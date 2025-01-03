@@ -13,9 +13,5 @@
 			</array>
 		</dict>
 	</array>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Uygulamanızın konumunuza erişmesine izin verin.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Uygulama konumunuzu kullanacak.</string>
 </dict>
 </plist>
