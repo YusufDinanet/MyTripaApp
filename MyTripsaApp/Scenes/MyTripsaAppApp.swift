@@ -2,7 +2,7 @@
 //  MyTripsaAppApp.swift
 //  MyTripsaApp
 //
-//  Created by Yusuf Dinanet on 15.12.2024.
+//  Created by Samet Berkay Üner on 15.12.2024.
 //
 import SwiftUI
 import GoogleSignIn
@@ -10,35 +10,42 @@ import FirebaseCore
 import Firebase
 import FirebaseAuth
 import CoreData
+import FirebaseFirestoreInternal
 
 @main
 struct MyTripsAppApp: App {
-    
+    init() {
+        // Uygulama başladığında bildirim izni iste
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            if granted {
+                print("Bildirim izni verildi")
+            }
+        }
+    }
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     var body: some Scene {
         WindowGroup {
-            LoginView() // Launch the Home Page as the main screen
-            //            ContentView()
-            //                            .environment(\.managedObjectContext, persistenceController.viewContext)
+            LoginView()
         }
     }
 }
 
 struct HomePageView: View {
-    // Sample Trips Data
-    @State private var trips: [Trip] = [
-        Trip(id: UUID(), name: "İtalya Gezisi", startDate: "15 Aralık 2024", endDate: "20 Aralık 2024", image: "italy"),
-        Trip(id: UUID(), name: "Paris Turu", startDate: "1 Ocak 2025", endDate: "5 Ocak 2025", image: "paris")
-    ]
-    @State private var userName: String = ""
+    @State private var highlightedTripIndex: Int? = nil
     var db = Firestore.firestore()
     var service: MyTripsaAppServiceProtocol = MyTripsaAppService()
     @State var nameCount: Int = 0
     @StateObject private var locationManager = LocationManager()
     let persistenceController = PersistenceController.shared
     @Environment(\.managedObjectContext) private var viewContext
-    @State private var isLoading = false
     @Environment(\.presentationMode) var presentationMode
+    @State private var isLoading = false
+    @State private var isThemePickerPresented: Bool = false
+    @State private var selectedTheme: Theme = ThemeManager.shared.currentTheme
+    private var notificationPublisher = NotificationCenter.default.publisher(for: .travelDateArrived)
+    
+    @FetchRequest(sortDescriptors: []) var tripler: FetchedResults<TripEntity>
+    
     
     var body: some View {
         NavigationView {
@@ -54,19 +61,21 @@ struct HomePageView: View {
                         .padding(.top)
                     
                     // Trips List
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            ForEach(trips) { trip in
-                                NavigationLink(destination: TripDetailsView(trip: trip)) {
-                                    TripCardView(trip: trip)
-                                }
+                    List {
+                        ForEach(tripler.indices, id: \.self) { index in
+                            let trip = tripler[index]
+                            NavigationLink(destination: TripDetailsView(trip: trip).environment(\.managedObjectContext, persistenceController.viewContext)) {
+                                TripCardView(trip: trip, isHighlighted: index == highlightedTripIndex)
+                                    .onAppear {
+                                        checkAndRevertColor(for: trip, at: index)
+                                    }
                             }
                         }
-                        .padding(.horizontal)
+                        .onDelete(perform: deleteTrip)
                     }
-                    
+
                     // Add New Trip Button
-                    NavigationLink(destination: AddTripView(trips: $trips).environment(\.managedObjectContext, persistenceController.viewContext)) {
+                    NavigationLink(destination: AddTripView().environment(\.managedObjectContext, persistenceController.viewContext)) {
                         HStack {
                             Image(systemName: "plus")
                                 .font(.title)
@@ -81,10 +90,31 @@ struct HomePageView: View {
                         .padding()
                     }
                 }
-            }.onAppear{
-                fetchTrips()
+            } .onReceive(notificationPublisher) { notification in
+                if let userInfo = notification.userInfo,
+                   let index = userInfo["index"] as? Int,
+                   let isHighlighted = userInfo["highlighted"] as? Bool {
+                    if isHighlighted {
+                        highlightedTripIndex = index
+                    } else {
+                        highlightedTripIndex = nil
+                    }
+                }
             }
-            .navigationBarHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        isThemePickerPresented = true
+                    }) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title2)
+                    }
+                    .popover(isPresented: $isThemePickerPresented) {
+                        ThemePickerView(selectedTheme: $selectedTheme, isPresented: $isThemePickerPresented)
+                    }
+                }
+            }
+            
         }.onAppear {
             let api = GeoapifyAPI()
             let urlString = api.createAttractionURL(
@@ -105,37 +135,121 @@ struct HomePageView: View {
                             print("success")
                         }
                     }
-                    nameCount+=1
+                    nameCount += 1
                 }
             }
             UserDefaults.standard.set(nameCount, forKey: "nameCount")
         }
     }
     
-    private func fetchTrips() {
-        isLoading = true
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        
-        // Verilerin sıralanması
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: true)]
-        
-        do {
-            let tripEntities = try viewContext.fetch(request)
-            
-            // Core Data verilerini Trip struct'ına dönüştürme
-            trips = tripEntities.map { tripEntity in
-                Trip(
-                    id: tripEntity.id ?? UUID(), // Core Data'daki id'yi kullan
-                    name: tripEntity.name ?? "Bilinmiyor", // Name'yi al
-                    startDate: formatDate(tripEntity.startDate ?? Date()), // Tarih formatlama
-                    endDate: formatDate(tripEntity.endDate ?? Date()), // Tarih formatlama
-                    image: "defaultImage" // Görsel bilgisi
-                )
+    private func deleteTrip(offsets: IndexSet) {
+        withAnimation {
+            offsets.map { tripler[$0] }.forEach { trip in
+                viewContext.delete(trip)
             }
-        } catch {
-            print("Veriler çekilemedi: \(error.localizedDescription)")
+            saveContext()
         }
-        isLoading = false
+    }
+    
+    private func saveContext() {
+        do {
+            try viewContext.save()
+        } catch {
+            print("Veriler kaydedilemedi: \(error.localizedDescription)")
+        }
+    }
+    
+    private func handleTripHighlight(notification: Notification) {
+        if let userInfo = notification.userInfo,
+           let index = userInfo["index"] as? Int,
+           let isHighlighted = userInfo["highlighted"] as? Bool {
+            if isHighlighted {
+                highlightedTripIndex = index
+            } else {
+                highlightedTripIndex = nil
+            }
+        }
+    }
+    
+    private func checkAndRevertColor(for trip: TripEntity, at index: Int) {
+        let startDate = trip.wrappedStartDate
+        let endDate = trip.wrappedEndDate
+
+        let today = Date()
+
+        if today >= startDate && today <= endDate {
+            // Bugün startDate ve endDate arasında ise, rengi değiştir
+            if highlightedTripIndex != index {
+                highlightedTripIndex = index
+                NotificationCenter.default.post(name: .travelDateArrived, object: nil, userInfo: ["index": index, "highlighted": true])
+            }
+        } else {
+            // Bugün startDate ve endDate arasında değilse, eski haline döndür
+            if highlightedTripIndex == index {
+                highlightedTripIndex = nil
+                NotificationCenter.default.post(name: .travelDateArrived, object: nil, userInfo: ["index": index, "highlighted": false])
+            }
+        }
+    }
+
+
+}
+
+struct TripCardView: View {
+    let trip: TripEntity
+    let isHighlighted: Bool
+    
+    var body: some View {
+        HStack {
+            if let imageName = trip.image,
+               let image = fetchImageFromDocumentsDirectory(imageName: imageName) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 80, height: 80)
+                    .clipped()
+                    .cornerRadius(10)
+            } else {
+                Image(systemName: "photo")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 80, height: 80)
+                    .foregroundColor(.gray)
+                    .clipped()
+                    .cornerRadius(10)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(trip.wrappedName)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Text("\(formatDate(trip.wrappedStartDate)) - \(formatDate(trip.wrappedEndDate))")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            }
+            Spacer()
+        }
+        .padding()
+        .background(isHighlighted ? Color.yellow : Color.white) // Change the color when highlighted
+        .cornerRadius(10)
+        .shadow(color: Color.gray.opacity(0.2), radius: 4, x: 0, y: 2)
+//        .onAppear {
+//            // Check and revert color when needed
+//            checkAndRevertColor(for: trip)
+//        }
+    }
+    
+    private func fetchImageFromDocumentsDirectory(imageName: String) -> UIImage? {
+        let fileManager = FileManager.default
+        let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let fileURL = documentsDirectory.appendingPathComponent(imageName)
+        
+        if fileManager.fileExists(atPath: fileURL.path) {
+            return UIImage(contentsOfFile: fileURL.path)
+        } else {
+            print("Hata: Görsel bulunamadı - \(imageName)")
+            return nil
+        }
     }
     
     private func formatDate(_ date: Date) -> String {
@@ -144,70 +258,30 @@ struct HomePageView: View {
         return formatter.string(from: date)
     }
     
+//    private func checkAndRevertColor(for trip: TripEntity) {
+//        if let endDate = trip.wrappedEndDate as? Date {
+//            if Date() >= endDate {
+//                if highlightedTripIndex == index {
+//                    highlightedTripIndex = nil
+//                }
+//            }
+//        } else {
+//            print("Error: Invalid end date for trip: \(trip.wrappedName)")
+//        }
+//    }
 }
 
-// Trip Card View
-struct TripCardView: View {
-    let trip: Trip
-    
-    var body: some View {
-        HStack {
-            Image(trip.image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 80, height: 80)
-                .clipped()
-                .cornerRadius(10)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(trip.name)
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                Text("\(trip.startDate) - \(trip.endDate)")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-            }
-            Spacer()
-        }
-        .padding()
-        .background(Color.white)
-        .cornerRadius(10)
-        .shadow(color: Color.gray.opacity(0.2), radius: 4, x: 0, y: 2)
-    }
-}
 
 // Trip Model
-struct Trip: Identifiable, Hashable {
+struct Trip: Identifiable {
     let id: UUID
     let name: String
     let startDate: String
     let endDate: String
     let image: String
-
-    // Hashable için gerekli fonksiyon
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-        hasher.combine(name)
-        hasher.combine(startDate)
-        hasher.combine(endDate)
-        hasher.combine(image)
-    }
-
-    // Equatable için gerekli fonksiyon (bu genellikle otomatik olarak sağlanır, ancak istenirse manuel de yapılabilir)
-    static func ==(lhs: Trip, rhs: Trip) -> Bool {
-        return lhs.id == rhs.id &&
-            lhs.name == rhs.name &&
-            lhs.startDate == rhs.startDate &&
-            lhs.endDate == rhs.endDate &&
-            lhs.image == rhs.image
-    }
 }
 
 
-
-// Preview
-//struct HomePageView_Previews: PreviewProvider {
-//    static var previews: some View {
-//        HomePageView()
-//    }
-//}
+extension Notification.Name {
+    static let travelDateArrived = Notification.Name("travelDateArrived")
+}

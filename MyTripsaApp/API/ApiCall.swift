@@ -2,7 +2,7 @@
 //  Untitled.swift
 //  MyTripsaApp
 //
-//  Created by Yusuf Dinanet on 19.12.2024.
+//  Created by Samet Berkay Üner on 19.12.2024.
 //
 
 import Foundation

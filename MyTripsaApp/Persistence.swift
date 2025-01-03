@@ -2,7 +2,7 @@
 //  Persistence.swift
 //  MyTripsaApp
 //
-//  Created by Yusuf Dinanet on 15.12.2024.
+//  Created by Samet Berkay Üner on 15.12.2024.
 //
 
 import CoreData
