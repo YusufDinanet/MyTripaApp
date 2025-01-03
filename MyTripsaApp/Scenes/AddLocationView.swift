@@ -1,13 +1,9 @@
 //
 //  Untitled.swift
-//  MyTripsaApp
+//  AddLocationView
 //
-//  Created by Yusuf Dinanet on 27.12.2024.
+//  Created by Samet Berkay Üner on 25.12.2024.
 //
-
-import SwiftUI
-import MapKit
-import CoreLocation
 
 import SwiftUI
 import MapKit
@@ -15,81 +11,81 @@ import CoreLocation
 
 struct AddLocationView: View {
     @State private var region = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194), // Varsayılan konum (San Francisco)
+        center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194), // Default location (San Francisco)
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
     @State private var selectedLocation: CLLocationCoordinate2D?
     @State private var name: String = ""
     @State private var description: String = ""
-    @State private var selectedDate: Date = Date() // Kullanıcı tarafından seçilen tarih
+    @State private var selectedDate: Date = Date() // Date picked by user
+    let persistenceController = PersistenceController.shared
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.presentationMode) var presentationMode
     @State private var userTrackingMode: MapUserTrackingMode = .follow
+    @StateObject var trips: TripEntity // Change to TripEntity, as it's Core Data entity
 
     var body: some View {
-        ScrollView {  // ScrollView ekleniyor
+        ScrollView {  // ScrollView to handle larger content
             VStack {
-                // Seyahat Adı ve Açıklaması
-                TextField("Konum Adı", text: $name)
+                // Location Name and Description
+                TextField("Location Name", text: $name)
                     .padding()
                     .textFieldStyle(RoundedBorderTextFieldStyle())
 
-                TextField("Açıklama", text: $description)
+                TextField("Description", text: $description)
                     .padding()
                     .textFieldStyle(RoundedBorderTextFieldStyle())
 
-                // Tarih Seçici
-                DatePicker("Tarih Seç", selection: $selectedDate, displayedComponents: .date)
+                // Date Picker
+                DatePicker("Select Date", selection: $selectedDate, displayedComponents: .date)
                     .padding()
-                    .datePickerStyle(WheelDatePickerStyle()) // Tarih seçimi için stil
+                    .datePickerStyle(WheelDatePickerStyle())
 
-                // Harita Görünümü
+                // Map View
                 Map(coordinateRegion: $region, interactionModes: .all, showsUserLocation: true, userTrackingMode: $userTrackingMode)
                     .frame(height: 300)
                     .onTapGesture {
-                        let tappedLocation = region.center // Tıklanan koordinatlar region'dan alınır
-                        region.center = tappedLocation // Region'un merkezini güncelle
-                        selectedLocation = tappedLocation // Seçilen konumu güncelle
+                        let tappedLocation = region.center // Get tapped location from region
+                        region.center = tappedLocation // Update the center of the region
+                        selectedLocation = tappedLocation // Update selected location
                     }
                     .padding()
                 
                 if let selectedLocation = selectedLocation {
-                    Text("Seçilen Konum: \(selectedLocation.latitude), \(selectedLocation.longitude)")
+                    Text("Selected Location: \(selectedLocation.latitude), \(selectedLocation.longitude)")
                         .padding()
                 }
 
-                Button("Konumu Kaydet") {
-                    if let selectedLocation = selectedLocation {
-                        // Konumu kaydetme işlemi yapılacak
-                        print("Konum kaydedildi: \(selectedLocation.latitude), \(selectedLocation.longitude)")
-                    }
+                Button("Save Location") {
                     saveLocation()
                 }
                 .padding()
             }
-            .navigationBarTitle("Konum Ekle")
+            .navigationBarTitle("Add Location")
         }
     }
 
-    // Konumu CoreData'ya kaydetme
+    // Save location to Core Data
     func saveLocation() {
         guard let selectedLocation = selectedLocation else {
-            print("Konum seçilmedi!")
+            print("Location not selected!")
             return
         }
 
         let newLocation = LocationEntity(context: viewContext)
         newLocation.name = name
-        newLocation.descriptionText = description
+        newLocation.locationDescription = description
         newLocation.latitude = selectedLocation.latitude
         newLocation.longitude = selectedLocation.longitude
-        newLocation.date = selectedDate // Tarih bilgisi kaydediliyor
+        newLocation.date = selectedDate // Save the selected date
+        newLocation.trip = trips // Associate this location with the selected trip
 
         do {
             try viewContext.save()
-            print("Konum başarıyla kaydedildi.")
+            presentationMode.wrappedValue.dismiss() // Dismiss view after saving
+            print("Location saved successfully.")
         } catch {
-            print("Konum kaydedilemedi: \(error.localizedDescription)")
+            print("Failed to save location: \(error.localizedDescription)")
         }
     }
 }

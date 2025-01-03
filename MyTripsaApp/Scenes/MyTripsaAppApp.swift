@@ -2,7 +2,7 @@
 //  MyTripsaAppApp.swift
 //  MyTripsaApp
 //
-//  Created by Yusuf Dinanet on 15.12.2024.
+//  Created by Samet Berkay Üner on 15.12.2024.
 //
 import SwiftUI
 import GoogleSignIn
@@ -10,6 +10,7 @@ import FirebaseCore
 import Firebase
 import FirebaseAuth
 import CoreData
+import FirebaseFirestoreInternal
 
 @main
 struct MyTripsAppApp: App {
@@ -17,9 +18,7 @@ struct MyTripsAppApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     var body: some Scene {
         WindowGroup {
-            LoginView() // Launch the Home Page as the main screen
-            //            ContentView()
-            //                            .environment(\.managedObjectContext, persistenceController.viewContext)
+            LoginView()
         }
     }
 }
@@ -37,8 +36,11 @@ struct HomePageView: View {
     @StateObject private var locationManager = LocationManager()
     let persistenceController = PersistenceController.shared
     @Environment(\.managedObjectContext) private var viewContext
-    @State private var isLoading = false
     @Environment(\.presentationMode) var presentationMode
+    @State private var isLoading = false
+    
+    @FetchRequest(sortDescriptors: []) var tripler: FetchedResults<TripEntity>
+    
     
     var body: some View {
         NavigationView {
@@ -56,8 +58,8 @@ struct HomePageView: View {
                     // Trips List
                     ScrollView {
                         VStack(spacing: 16) {
-                            ForEach(trips) { trip in
-                                NavigationLink(destination: TripDetailsView(trip: trip)) {
+                            ForEach(tripler, id: \.self) { trip in
+                                NavigationLink(destination: TripDetailsView(trip: trip).environment(\.managedObjectContext, persistenceController.viewContext)) {
                                     TripCardView(trip: trip)
                                 }
                             }
@@ -82,7 +84,7 @@ struct HomePageView: View {
                     }
                 }
             }.onAppear{
-                fetchTrips()
+//                fetchTrips()
             }
             .navigationBarHidden(true)
         }.onAppear {
@@ -148,11 +150,11 @@ struct HomePageView: View {
 
 // Trip Card View
 struct TripCardView: View {
-    let trip: Trip
+    let trip: TripEntity
     
     var body: some View {
         HStack {
-            Image(trip.image)
+            Image("")
                 .resizable()
                 .scaledToFill()
                 .frame(width: 80, height: 80)
@@ -160,10 +162,10 @@ struct TripCardView: View {
                 .cornerRadius(10)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(trip.name)
+                Text(trip.wrappedName)
                     .font(.headline)
                     .fontWeight(.semibold)
-                Text("\(trip.startDate) - \(trip.endDate)")
+                Text("\(trip.wrappedStartDate) - \(trip.wrappedEndDate)")
                     .font(.subheadline)
                     .foregroundColor(.gray)
             }
@@ -177,32 +179,13 @@ struct TripCardView: View {
 }
 
 // Trip Model
-struct Trip: Identifiable, Hashable {
+struct Trip: Identifiable {
     let id: UUID
     let name: String
     let startDate: String
     let endDate: String
     let image: String
-
-    // Hashable için gerekli fonksiyon
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-        hasher.combine(name)
-        hasher.combine(startDate)
-        hasher.combine(endDate)
-        hasher.combine(image)
-    }
-
-    // Equatable için gerekli fonksiyon (bu genellikle otomatik olarak sağlanır, ancak istenirse manuel de yapılabilir)
-    static func ==(lhs: Trip, rhs: Trip) -> Bool {
-        return lhs.id == rhs.id &&
-            lhs.name == rhs.name &&
-            lhs.startDate == rhs.startDate &&
-            lhs.endDate == rhs.endDate &&
-            lhs.image == rhs.image
-    }
 }
-
 
 
 // Preview

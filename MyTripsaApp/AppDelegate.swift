@@ -2,7 +2,7 @@
 //  AppDelegate.swift
 //  MyTripsaApp
 //
-//  Created by Yusuf Dinanet on 16.12.2024.
+//  Created by Samet Berkay Üner on 16.12.2024.
 //
 import SwiftUI
 import FirebaseCore
