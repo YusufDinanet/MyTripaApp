@@ -5,7 +5,7 @@ Bu belge, seyahat uygulamasının özelliklerini ve işlevselliğini detaylı bi
 ### Özellikler
 
 1. **Konum Detayları**
-![01145b62-7c92-4dfb-9120-cf990ac87fac](https://github.com/user-attachments/assets/99dcaa74-f3f2-4cc4-a642-65c6b464031e)
+<img src="https://github.com/user-attachments/assets/99dcaa74-f3f2-4cc4-a642-65c6b464031e" alt="Konum Detayları" width="300" />
    - "Gran Via" hakkında bilgi bulunan konum detayları sayfası.
    - Kullanıcılara mimari detaylar ve ziyaret tarihleri sunularak daha etkili planlama sağlanır.
    - Belirli bir konuma ait etkileşimli bir harita, gezinme kolaylığı sunar.
