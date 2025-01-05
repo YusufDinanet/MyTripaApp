@@ -5,7 +5,7 @@ Bu belge, seyahat uygulamasının özelliklerini ve işlevselliğini detaylı bi
 ### Özellikler
 
 1. **Konum Detayları**
-   ![Uploading aca9127e-805b-4e02-9fb3-896eacc614c6.jpg…]()
+  ![Uploading aca9127e-805b-4e02-9fb3-896eacc614c6.jpg…]()
    - "Gran Via" hakkında bilgi bulunan konum detayları sayfası.
    - Kullanıcılara mimari detaylar ve ziyaret tarihleri sunularak daha etkili planlama sağlanır.
    - Belirli bir konuma ait etkileşimli bir harita, gezinme kolaylığı sunar.
