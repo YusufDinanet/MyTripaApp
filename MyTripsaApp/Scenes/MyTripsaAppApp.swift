@@ -311,10 +311,6 @@ struct TripCardView: View {
         .background(isHighlighted ? Color.yellow : Color.white) // Change the color when highlighted
         .cornerRadius(10)
         .shadow(color: Color.gray.opacity(0.2), radius: 4, x: 0, y: 2)
-        //        .onAppear {
-        //            // Check and revert color when needed
-        //            checkAndRevertColor(for: trip)
-        //        }
     }
     
     private func fetchImageFromDocumentsDirectory(imageName: String) -> UIImage? {
@@ -335,18 +331,6 @@ struct TripCardView: View {
         formatter.dateStyle = .short
         return formatter.string(from: date)
     }
-    
-    //    private func checkAndRevertColor(for trip: TripEntity) {
-    //        if let endDate = trip.wrappedEndDate as? Date {
-    //            if Date() >= endDate {
-    //                if highlightedTripIndex == index {
-    //                    highlightedTripIndex = nil
-    //                }
-    //            }
-    //        } else {
-    //            print("Error: Invalid end date for trip: \(trip.wrappedName)")
-    //        }
-    //    }
 }
 
 
